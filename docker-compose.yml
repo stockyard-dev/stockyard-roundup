@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  roundup:
+    build: .
+    ports:
+      - "9170:9170"
+    environment:
+      - PORT=9170
+      - DATA_DIR=/data
+      - ROUNDUP_LICENSE_KEY=
+    volumes:
+      - roundup_data:/data
+    restart: unless-stopped
+volumes:
+  roundup_data:
