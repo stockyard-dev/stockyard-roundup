@@ -1,59 +1,18 @@
 package store
-
-import (
-	"database/sql"
-	"fmt"
-	"os"
-	"path/filepath"
-
-	_ "modernc.org/sqlite"
-)
-
-type DB struct {
-	*sql.DB
-}
-
-func Open(dataDir string) (*DB, error) {
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir: %w", err)
-	}
-	dsn := filepath.Join(dataDir, "roundup.db") + "?_journal_mode=WAL&_busy_timeout=5000"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-	if err := migrate(db); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	return &DB{db}, nil
-}
-
-func migrate(db *sql.DB) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS meetings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        date TEXT NOT NULL,
-        attendees TEXT,
-        notes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-     );
-     CREATE TABLE IF NOT EXISTS action_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meeting_id INTEGER,
-        description TEXT NOT NULL,
-        assignee TEXT,
-        due_date TEXT,
-        completed INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-     );
-     CREATE TABLE IF NOT EXISTS decisions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meeting_id INTEGER,
-        description TEXT NOT NULL,
-        rationale TEXT,
-        made_by TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-     );`)
-	return err
-}
+import("database/sql";"fmt";"os";"path/filepath";"time";_ "modernc.org/sqlite")
+type DB struct{*sql.DB}
+type Meeting struct{ID int64 `json:"id"`;Title string `json:"title"`;Date string `json:"date"`;Duration int `json:"duration_minutes"`;Attendees string `json:"attendees"`;Notes string `json:"notes"`;CreatedAt time.Time `json:"created_at"`}
+type ActionItem struct{ID int64 `json:"id"`;MeetingID int64 `json:"meeting_id"`;MeetingTitle string `json:"meeting_title,omitempty"`;Assignee string `json:"assignee"`;Description string `json:"description"`;DueDate string `json:"due_date"`;Done bool `json:"done"`;CreatedAt time.Time `json:"created_at"`}
+func Open(dataDir string)(*DB,error){if err:=os.MkdirAll(dataDir,0755);err!=nil{return nil,fmt.Errorf("mkdir: %w",err)};dsn:=filepath.Join(dataDir,"roundup.db")+"?_journal_mode=WAL&_busy_timeout=5000";db,err:=sql.Open("sqlite",dsn);if err!=nil{return nil,fmt.Errorf("open: %w",err)};db.SetMaxOpenConns(1);if err:=migrate(db);err!=nil{return nil,fmt.Errorf("migrate: %w",err)};return &DB{db},nil}
+func migrate(db *sql.DB)error{_,err:=db.Exec(`CREATE TABLE IF NOT EXISTS meetings(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,date TEXT NOT NULL,duration_minutes INTEGER DEFAULT 60,attendees TEXT DEFAULT '',notes TEXT DEFAULT '',created_at DATETIME DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS action_items(id INTEGER PRIMARY KEY AUTOINCREMENT,meeting_id INTEGER NOT NULL,assignee TEXT DEFAULT '',description TEXT NOT NULL,due_date TEXT DEFAULT '',done INTEGER DEFAULT 0,created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);return err}
+func(db *DB)ListMeetings()([]Meeting,error){rows,err:=db.Query(`SELECT id,title,date,duration_minutes,attendees,notes,created_at FROM meetings ORDER BY date DESC LIMIT 50`);if err!=nil{return nil,err};defer rows.Close();var out[]Meeting;for rows.Next(){var m Meeting;rows.Scan(&m.ID,&m.Title,&m.Date,&m.Duration,&m.Attendees,&m.Notes,&m.CreatedAt);out=append(out,m)};return out,nil}
+func(db *DB)GetMeeting(id int64)(*Meeting,error){m:=&Meeting{};err:=db.QueryRow(`SELECT id,title,date,duration_minutes,attendees,notes,created_at FROM meetings WHERE id=?`,id).Scan(&m.ID,&m.Title,&m.Date,&m.Duration,&m.Attendees,&m.Notes,&m.CreatedAt);if err!=nil{return nil,err};return m,nil}
+func(db *DB)CreateMeeting(m *Meeting)error{res,err:=db.Exec(`INSERT INTO meetings(title,date,duration_minutes,attendees,notes)VALUES(?,?,?,?,?)`,m.Title,m.Date,m.Duration,m.Attendees,m.Notes);if err!=nil{return err};m.ID,_=res.LastInsertId();return nil}
+func(db *DB)UpdateMeetingNotes(id int64,notes string)error{_,err:=db.Exec(`UPDATE meetings SET notes=? WHERE id=?`,notes,id);return err}
+func(db *DB)DeleteMeeting(id int64)error{_,err:=db.Exec(`DELETE FROM meetings WHERE id=?`,id);_,_=db.Exec(`DELETE FROM action_items WHERE meeting_id=?`,id);return err}
+func(db *DB)ListActionItems(meetingID int64,open bool)([]ActionItem,error){var q string;var rows *sql.Rows;var err error;if meetingID>0{q=`SELECT a.id,a.meeting_id,COALESCE(m.title,''),a.assignee,a.description,a.due_date,a.done,a.created_at FROM action_items a LEFT JOIN meetings m ON m.id=a.meeting_id WHERE a.meeting_id=? ORDER BY a.created_at DESC`;rows,err=db.Query(q,meetingID)}else if open{q=`SELECT a.id,a.meeting_id,COALESCE(m.title,''),a.assignee,a.description,a.due_date,a.done,a.created_at FROM action_items a LEFT JOIN meetings m ON m.id=a.meeting_id WHERE a.done=0 ORDER BY a.due_date,a.created_at DESC`;rows,err=db.Query(q)}else{q=`SELECT a.id,a.meeting_id,COALESCE(m.title,''),a.assignee,a.description,a.due_date,a.done,a.created_at FROM action_items a LEFT JOIN meetings m ON m.id=a.meeting_id ORDER BY a.created_at DESC LIMIT 50`;rows,err=db.Query(q)};if err!=nil{return nil,err};defer rows.Close();var out[]ActionItem;for rows.Next(){var a ActionItem;var done int;rows.Scan(&a.ID,&a.MeetingID,&a.MeetingTitle,&a.Assignee,&a.Description,&a.DueDate,&done,&a.CreatedAt);a.Done=done==1;out=append(out,a)};return out,nil}
+func(db *DB)CreateActionItem(a *ActionItem)error{res,err:=db.Exec(`INSERT INTO action_items(meeting_id,assignee,description,due_date)VALUES(?,?,?,?)`,a.MeetingID,a.Assignee,a.Description,a.DueDate);if err!=nil{return err};a.ID,_=res.LastInsertId();return nil}
+func(db *DB)ToggleActionItem(id int64)error{_,err:=db.Exec(`UPDATE action_items SET done=1-done WHERE id=?`,id);return err}
+func(db *DB)DeleteActionItem(id int64)error{_,err:=db.Exec(`DELETE FROM action_items WHERE id=?`,id);return err}
+func(db *DB)CountMeetings()(int,error){var n int;db.QueryRow(`SELECT COUNT(*) FROM meetings`).Scan(&n);return n,nil}
+func(db *DB)CountOpenActions()(int,error){var n int;db.QueryRow(`SELECT COUNT(*) FROM action_items WHERE done=0`).Scan(&n);return n,nil}

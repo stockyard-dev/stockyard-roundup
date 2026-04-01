@@ -1,120 +1,42 @@
 package server
 
 var dashboardHTML = []byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stockyard Roundup</title>
-<style>
-  :root {
-    --bg: #1a1410;
-    --surface: #241c15;
-    --border: #3d2e1e;
-    --rust: #c4622d;
-    --leather: #8b5e3c;
-    --cream: #f5e6c8;
-    --muted: #7a6550;
-    --text: #e8d5b0;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace, sans-serif; min-height: 100vh; }
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
-  .logo { color: var(--rust); font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; }
-  .badge { background: var(--rust); color: var(--cream); font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 3px; font-weight: 600; text-transform: uppercase; }
-  main { max-width: 960px; margin: 2rem auto; padding: 0 2rem; }
-  .hero { text-align: center; padding: 3rem 0 2rem; }
-  .hero h1 { font-size: 2rem; color: var(--cream); margin-bottom: 0.5rem; }
-  .hero p { color: var(--muted); font-size: 0.95rem; max-width: 480px; margin: 0 auto; }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 2rem 0; }
-  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.25rem; text-align: center; }
-  .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--rust); }
-  .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.5rem; margin-bottom: 1rem; }
-  .card h2 { font-size: 1rem; color: var(--cream); margin-bottom: 1rem; }
-  .tier-box { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  .tier { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1rem; }
-  .tier.pro { border-color: var(--rust); }
-  .tier-name { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.5rem; }
-  .tier.pro .tier-name { color: var(--rust); }
-  .tier-desc { font-size: 0.85rem; color: var(--text); }
-  .tier-price { font-size: 0.8rem; color: var(--leather); margin-top: 0.5rem; }
-  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.75rem; }
-  footer a { color: var(--leather); text-decoration: none; }
-  .endpoint-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  .endpoint-table th { text-align: left; color: var(--muted); padding: 0.5rem; border-bottom: 1px solid var(--border); }
-  .endpoint-table td { padding: 0.5rem; border-bottom: 1px solid var(--border); color: var(--text); }
-  .method { color: var(--rust); font-weight: 600; }
-</style>
-</head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Stockyard Roundup</title><style>:root{--bg:#1a1410;--surface:#241c15;--border:#3d2e1e;--rust:#c4622d;--leather:#8b5e3c;--cream:#f5e6c8;--muted:#7a6550;--text:#e8d5b0}*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace,sans-serif}header{background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;gap:1rem}.logo{color:var(--rust);font-size:1.25rem;font-weight:700}.badge{background:var(--rust);color:var(--cream);font-size:0.65rem;padding:0.2rem 0.5rem;border-radius:3px;font-weight:600;text-transform:uppercase}main{max-width:1100px;margin:0 auto;padding:2rem}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem}.stat{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.25rem;text-align:center}.stat-value{font-size:1.75rem;font-weight:700;color:var(--rust)}.stat-label{font-size:0.75rem;color:var(--muted);margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.05em}.grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:2rem}.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.5rem}.card h2{font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1rem}.full{grid-column:1/-1}.form-row{display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap}select,input,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.5rem 0.75rem;border-radius:4px;font-family:inherit;font-size:0.85rem;flex:1}textarea{resize:vertical;min-height:100px;flex:none;width:100%}.btn{background:var(--rust);color:var(--cream);border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:600}.btn:hover{opacity:0.85}.btn-sm{padding:0.25rem 0.6rem;font-size:0.75rem}.btn-danger{background:#7a2020}.btn-outline{background:transparent;border:1px solid var(--rust);color:var(--rust)}table{width:100%;border-collapse:collapse;font-size:0.82rem}th{text-align:left;color:var(--muted);padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.75rem;text-transform:uppercase}td{padding:0.5rem;border-bottom:1px solid var(--border)}.empty{color:var(--muted);font-size:0.85rem;padding:1rem 0;text-align:center}.meeting-row{cursor:pointer}.meeting-row:hover{background:rgba(196,98,45,0.08)}.detail{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1rem;margin-top:1rem;display:none}.check{color:#5cb85c;cursor:pointer}.done-row td{opacity:0.5;text-decoration:line-through}</style></head>
 <body>
-<header>
-  <span class="logo">⬡ Stockyard</span>
-  <span style="color:var(--muted);">/</span>
-  <span style="color:var(--cream);font-weight:600;">Roundup</span>
-  <span class="badge">v0.1.0</span>
-</header>
+<header><span class="logo">&#x2B21; Stockyard</span><span style="color:var(--muted)">/</span><span style="color:var(--cream);font-weight:600">Roundup</span><span class="badge">Meetings</span></header>
 <main>
-  <div class="hero">
-    <h1>Roundup</h1>
-    <p>Meeting notes and decisions log — structured notes, action items, decision log, search</p>
-  </div>
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-value" id="stat-items">—</div>
-      <div class="stat-label">Total Items</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">9170</div>
-      <div class="stat-label">Port</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" id="stat-tier">—</div>
-      <div class="stat-label">Tier</div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>Tier &amp; Limits</h2>
-    <div class="tier-box">
-      <div class="tier">
-        <div class="tier-name">Free</div>
-        <div class="tier-desc">20 meetings</div>
-        <div class="tier-price">$0/mo</div>
-      </div>
-      <div class="tier pro">
-        <div class="tier-name">Pro</div>
-        <div class="tier-desc">Unlimited meetings and decisions</div>
-        <div class="tier-price">$2.99/mo</div>
-      </div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>API Endpoints</h2>
-    <table class="endpoint-table">
-      <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="method">GET</td><td>/health</td><td>Health check</td></tr>
-        <tr><td class="method">GET</td><td>/api/version</td><td>Version info</td></tr>
-        <tr><td class="method">GET</td><td>/api/limits</td><td>Current tier limits</td></tr>
-        <tr><td class="method">GET</td><td>/api/items</td><td>List items</td></tr>
-        <tr><td class="method">POST</td><td>/api/items</td><td>Create item</td></tr>
-        <tr><td class="method">GET</td><td>/api/items/{id}</td><td>Get item</td></tr>
-        <tr><td class="method">PUT</td><td>/api/items/{id}</td><td>Update item</td></tr>
-        <tr><td class="method">DELETE</td><td>/api/items/{id}</td><td>Delete item</td></tr>
-      </tbody>
-    </table>
-  </div>
+<div class="stats"><div class="stat"><div class="stat-value" id="s1">0</div><div class="stat-label">Meetings</div></div><div class="stat"><div class="stat-value" id="s2">0</div><div class="stat-label">Open Actions</div></div><div class="stat"><div class="stat-value" id="s3">FREE</div><div class="stat-label">Tier</div></div></div>
+<div class="grid">
+<div class="card"><h2>New Meeting</h2>
+<div class="form-row"><input id="f-title" placeholder="Meeting title"><input id="f-date" type="datetime-local"></div>
+<div class="form-row"><input id="f-dur" type="number" placeholder="Duration (min)" value="60"><input id="f-att" placeholder="Attendees (comma separated)"></div>
+<button class="btn" onclick="createMeeting()">Create Meeting</button></div>
+<div class="card"><h2>Open Action Items</h2><div id="open-actions"><div class="empty">No open actions</div></div></div>
+</div>
+<div class="card full"><h2>Meetings</h2><div id="meeting-list"><div class="empty">No meetings yet</div></div></div>
+<div class="card full" id="detail-card" style="display:none">
+<h2>Meeting Notes: <span id="detail-title" style="color:var(--cream)"></span></h2>
+<textarea id="detail-notes" rows="6" placeholder="Enter meeting notes, decisions, highlights..."></textarea>
+<div style="margin:0.75rem 0"><button class="btn btn-sm" onclick="saveNotes()">Save Notes</button> <button class="btn btn-sm btn-outline" onclick="closeDetail()">Close</button></div>
+<h2 style="margin-top:1rem">Action Items</h2>
+<div class="form-row"><input id="a-desc" placeholder="Action item description"><input id="a-who" placeholder="Assignee"><input id="a-due" type="date"><button class="btn btn-sm" onclick="addAction()">Add</button></div>
+<div id="detail-actions"><div class="empty">No actions</div></div>
+</div>
 </main>
-<footer>
-  <a href="https://stockyard.dev">stockyard.dev</a> &mdash; Operations & Teams &mdash; Apache 2.0
-</footer>
 <script>
-fetch('/api/limits').then(r=>r.json()).then(d=>{
-  document.getElementById('stat-tier').textContent = d.tier.toUpperCase();
-});
-fetch('/api/items').then(r=>r.json()).then(d=>{
-  document.getElementById('stat-items').textContent = Array.isArray(d) ? d.length : '0';
-});
-</script>
-</body>
-</html>`)
+var curMeeting=null;
+function load(){fetch('/api/stats').then(function(r){return r.json()}).then(function(d){document.getElementById('s1').textContent=d.meetings||0;document.getElementById('s2').textContent=d.open_actions||0})}
+function loadMeetings(){fetch('/api/meetings').then(function(r){return r.json()}).then(function(list){var el=document.getElementById('meeting-list');el.innerHTML=list.length?'<table><thead><tr><th>Title</th><th>Date</th><th>Duration</th><th>Attendees</th><th></th></tr></thead><tbody>'+list.map(function(m){return'<tr class="meeting-row" onclick="openDetail('+m.id+',\''+m.title.replace(/'/g,'')+'\')"><td style="color:var(--cream)">'+m.title+'</td><td>'+m.date+'</td><td>'+m.duration_minutes+'m</td><td>'+m.attendees+'</td><td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();delMeeting('+m.id+')">Del</button></td></tr>'}).join('')+"</tbody></table>":'<div class="empty">No meetings yet</div>'})}
+function loadOpenActions(){fetch('/api/actions?open=1').then(function(r){return r.json()}).then(function(list){var el=document.getElementById('open-actions');el.innerHTML=list.length?list.map(function(a){return'<div style="display:flex;gap:0.5rem;align-items:start;padding:0.4rem 0;border-bottom:1px solid var(--border)"><span class="check" onclick="toggleAction('+a.id+')">&#x25CB;</span><div style="flex:1"><div>'+a.description+'</div><div style="font-size:0.75rem;color:var(--muted)">'+a.assignee+(a.due_date?' &bull; due '+a.due_date:'')+'</div></div></div>'}).join(''):'<div class="empty">No open actions</div>'})}
+function openDetail(id,title){curMeeting=id;document.getElementById('detail-title').textContent=title;document.getElementById('detail-card').style.display='block';fetch('/api/meetings/'+id).then(function(r){return r.json()}).then(function(m){document.getElementById('detail-notes').value=m.notes||''});loadDetailActions(id)}
+function closeDetail(){document.getElementById('detail-card').style.display='none';curMeeting=null}
+function saveNotes(){if(!curMeeting)return;var n=document.getElementById('detail-notes').value;fetch('/api/meetings/'+curMeeting+'/notes',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes:n})})}
+function loadDetailActions(id){fetch('/api/actions?meeting_id='+id).then(function(r){return r.json()}).then(function(list){var el=document.getElementById('detail-actions');el.innerHTML=list.length?list.map(function(a){var cls=a.done?'done-row':'';
+return'<div class="'+cls+'" style="display:flex;gap:0.5rem;align-items:start;padding:0.4rem 0;border-bottom:1px solid var(--border)"><span class="check" onclick="toggleAction('+a.id+')">'+(a.done?'&#x2713;':'&#x25CB;')+'</span><div style="flex:1"><div>'+a.description+'</div><div style="font-size:0.75rem;color:var(--muted)">'+a.assignee+(a.due_date?' &bull; due '+a.due_date:'')+'</div></div><button class="btn btn-sm btn-danger" onclick="delAction('+a.id+')">x</button></div>'}).join(''):'<div class="empty">No actions</div>'})}
+function addAction(){var d={meeting_id:curMeeting,description:document.getElementById('a-desc').value.trim(),assignee:document.getElementById('a-who').value.trim(),due_date:document.getElementById('a-due').value};if(!d.description)return;fetch('/api/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(){document.getElementById('a-desc').value='';document.getElementById('a-who').value='';loadDetailActions(curMeeting);loadOpenActions();load()})}
+function toggleAction(id){fetch('/api/actions/'+id+'/toggle',{method:'POST'}).then(function(){if(curMeeting)loadDetailActions(curMeeting);loadOpenActions();load()})}
+function delAction(id){fetch('/api/actions/'+id,{method:'DELETE'}).then(function(){if(curMeeting)loadDetailActions(curMeeting);loadOpenActions();load()})}
+function createMeeting(){var d={title:document.getElementById('f-title').value.trim(),date:document.getElementById('f-date').value,duration_minutes:parseInt(document.getElementById('f-dur').value)||60,attendees:document.getElementById('f-att').value.trim()};if(!d.title||!d.date)return;fetch('/api/meetings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(){loadMeetings();load()})}
+function delMeeting(id){fetch('/api/meetings/'+id,{method:'DELETE'}).then(function(){if(curMeeting===id)closeDetail();loadMeetings();load()})}
+load();loadMeetings();loadOpenActions();
+</script></body></html>`)
