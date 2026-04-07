@@ -331,9 +331,13 @@ func (s *Server) updateTask(w http.ResponseWriter, r *http.Request) {
 	if t.DueDate == "" {
 		t.DueDate = existing.DueDate
 	}
-	// project_id of "" is ambiguous — could mean "remove from project" or
-	// "not sent". The dashboard always sends it explicitly, so we trust the
-	// incoming value.
+	// project_id of "" preserves the existing project link. To explicitly
+	// remove a task from its project, the API client should pass a sentinel
+	// value (none currently supported) or use a separate endpoint. Empty
+	// string is treated as "not sent" rather than "remove project".
+	if t.ProjectID == "" {
+		t.ProjectID = existing.ProjectID
+	}
 	if t.Tags == nil {
 		t.Tags = existing.Tags
 	}
