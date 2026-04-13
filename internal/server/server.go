@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -80,6 +82,7 @@ func New(db *store.DB, limits Limits, dataDir string, b *bus.Bus) *Server {
 	s.mux.HandleFunc("GET /ui/", s.dashboard)
 	s.mux.HandleFunc("GET /", s.root)
 
+	s.subscribeBus()
 	return s
 }
 
@@ -455,4 +458,126 @@ func (s *Server) publishTask(topic string, t *store.Task) {
 			log.Printf("roundup: bus publish %s failed: %v", topic, err)
 		}
 	}()
+}
+
+// subscribeBus wires cross-tool events to auto-drafted tasks.
+// No-op when s.bus is nil (standalone mode).
+//
+// Allowlist-only (not SubscribeAll) so future topics don't silently
+// start creating follow-up tasks. Expanding this list is a
+// PR-reviewed change — every addition is "a new way tasks appear in
+// the user's queue without them clicking New Task."
+//
+// Idempotency: the [invoice:<id>] marker is embedded in the task
+// Description and scanned on each fire. Bus cursor initializes at the
+// current high-water mark on Open (bus.go:199), so process restart
+// does NOT replay old events — we only dedup in-process duplicate
+// fires during a single bundle lifetime.
+//
+// Handlers return nil on decode/data errors. The bus has no automatic
+// retry (bus.go Handler docstring).
+func (s *Server) subscribeBus() {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Subscribe("invoice.overdue", func(_ context.Context, e bus.Event) error {
+		return s.handleInvoiceOverdue(e)
+	})
+	log.Printf("roundup: subscribed to invoice.overdue")
+}
+
+// handleInvoiceOverdue creates a follow-up task when billfold flags
+// an invoice overdue.
+//
+// Shape decisions (see BUS-TOPICS.md):
+//   - Title = "Follow up on overdue invoice: <client_name>". Short
+//     enough for the task list UI, specific enough to scan.
+//   - Description = human-readable summary (invoice id, client,
+//     amount, due date) with a [invoice:<id>] idempotency marker
+//     appended. The marker is plain text in the body because
+//     roundup's store doesn't have a dedicated source field and
+//     Description is the natural place for provenance — a human
+//     reading the task sees why it exists.
+//   - Status = "todo". Enters the standard kanban intake column.
+//   - Priority = "high". Overdue money is always the top of the
+//     stack; user can demote in the UI if they disagree.
+//   - Assignee = "" (user assigns manually — we have no mapping from
+//     invoice → responsible person).
+//   - DueDate = "" (no policy to infer; user sets when they triage).
+//   - Tags = ["overdue", "billing"]. Conventional enough for filter.
+//   - ProjectID = "" (lives in the default bucket).
+func (s *Server) handleInvoiceOverdue(e bus.Event) error {
+	var p map[string]any
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		log.Printf("roundup: decode invoice.overdue: %v", err)
+		return nil
+	}
+	invoiceID := stringField(p, "invoice_id")
+	if invoiceID == "" {
+		log.Printf("roundup: invoice.overdue missing invoice_id, skipping")
+		return nil
+	}
+	marker := fmt.Sprintf("[invoice:%s]", invoiceID)
+	// Idempotency: scan existing tasks for this marker in the
+	// description. ListTasks with all-empty filters returns every task.
+	for _, existing := range s.db.ListTasks("", "", "") {
+		if strings.Contains(existing.Description, marker) {
+			log.Printf("roundup: invoice %s already has follow-up task %s, skipping",
+				invoiceID, existing.ID)
+			return nil
+		}
+	}
+	clientName := stringField(p, "client_name")
+	if clientName == "" {
+		clientName = "(unknown client)"
+	}
+	amount := intField(p, "amount")
+	dueDate := stringField(p, "due_date")
+	title := fmt.Sprintf("Follow up on overdue invoice: %s", clientName)
+	desc := fmt.Sprintf(
+		"Invoice %s for %s (amount %d) is overdue",
+		invoiceID, clientName, amount,
+	)
+	if dueDate != "" {
+		desc += " since " + dueDate
+	}
+	desc += ". " + marker
+	task := store.Task{
+		Title:       title,
+		Description: desc,
+		Status:      "todo",
+		Priority:    "high",
+		Tags:        []string{"overdue", "billing"},
+	}
+	if err := s.db.CreateTask(&task); err != nil {
+		log.Printf("roundup: create task for invoice %s: %v", invoiceID, err)
+		return nil
+	}
+	log.Printf("roundup: auto-drafted task %s for overdue invoice %s (client=%q)",
+		task.ID, invoiceID, clientName)
+	return nil
+}
+
+// stringField returns m[k] as a string, or "" if absent / wrong type.
+func stringField(m map[string]any, k string) string {
+	if v, ok := m[k].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// intField returns m[k] as an int, truncating float64 JSON numbers.
+func intField(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	}
+	return 0
 }
