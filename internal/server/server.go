@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/stockyard-dev/stockyard-roundup/internal/store"
+	"github.com/stockyard-dev/stockyard/bus"
 )
 
 // Resource keys for the extras table.
@@ -25,14 +27,16 @@ type Server struct {
 	limits  Limits
 	dataDir string
 	pCfg    map[string]json.RawMessage
+	bus     *bus.Bus // optional cross-tool event bus; nil if not configured
 }
 
-func New(db *store.DB, limits Limits, dataDir string) *Server {
+func New(db *store.DB, limits Limits, dataDir string, b *bus.Bus) *Server {
 	s := &Server{
 		db:      db,
 		mux:     http.NewServeMux(),
 		limits:  limits,
 		dataDir: dataDir,
+		bus:     b,
 	}
 	s.loadPersonalConfig()
 
@@ -286,7 +290,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		we(w, 500, "create failed")
 		return
 	}
-	wj(w, 201, s.db.GetTask(t.ID))
+	created := s.db.GetTask(t.ID)
+	s.publishTask("task.created", created)
+	wj(w, 201, created)
 }
 
 func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
@@ -346,7 +352,15 @@ func (s *Server) updateTask(w http.ResponseWriter, r *http.Request) {
 		we(w, 500, "update failed")
 		return
 	}
-	wj(w, 200, s.db.GetTask(existing.ID))
+	updated := s.db.GetTask(existing.ID)
+	// Fire task.completed only on status transition into done.
+	// Subscribers don't want to see the same completed event every
+	// time an admin edits notes on an already-done task.
+	if updated != nil && existing.Status != updated.Status &&
+		strings.ToLower(updated.Status) == "done" {
+		s.publishTask("task.completed", updated)
+	}
+	wj(w, 200, updated)
 }
 
 func (s *Server) deleteTask(w http.ResponseWriter, r *http.Request) {
@@ -374,12 +388,21 @@ func (s *Server) setStatus(w http.ResponseWriter, r *http.Request) {
 		we(w, 400, "status required")
 		return
 	}
+	prevStatus := t.Status
 	t.Status = body.Status
 	if err := s.db.UpdateTask(t.ID, t); err != nil {
 		we(w, 500, "update failed")
 		return
 	}
-	wj(w, 200, s.db.GetTask(t.ID))
+	updated := s.db.GetTask(t.ID)
+	// Kanban-style status flip: mirror the same transition firing
+	// the full updateTask path uses. Both endpoints now emit
+	// task.completed consistently when a task moves into "done".
+	if updated != nil && prevStatus != updated.Status &&
+		strings.ToLower(updated.Status) == "done" {
+		s.publishTask("task.completed", updated)
+	}
+	wj(w, 200, updated)
 }
 
 // ─── stats / health ───────────────────────────────────────────────
@@ -400,4 +423,36 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+// publishTask fires a task.* event on the bus. No-op when s.bus is
+// nil. Runs in a goroutine; errors logged not surfaced. Payload
+// shape locked by docs/BUS-TOPICS.md v1 in stockyard-desktop.
+//
+// Reality notes:
+// - Roundup has no contact_id FK on tasks. Assignee is a free-text
+//   field; subscribers wanting contact linkage must fuzzy-match.
+// - Tags is a []string; payload forwards it as-is.
+// - CompletedAt is store-populated when status flips to done.
+func (s *Server) publishTask(topic string, t *store.Task) {
+	if s.bus == nil || t == nil {
+		return
+	}
+	payload := map[string]any{
+		"task_id":      t.ID,
+		"project_id":   t.ProjectID,
+		"title":        t.Title,
+		"description":  t.Description,
+		"status":       t.Status,
+		"priority":     t.Priority,
+		"assignee":     t.Assignee,
+		"due_date":     t.DueDate,
+		"tags":         t.Tags,
+		"completed_at": t.CompletedAt,
+	}
+	go func() {
+		if _, err := s.bus.Publish(topic, payload); err != nil {
+			log.Printf("roundup: bus publish %s failed: %v", topic, err)
+		}
+	}()
 }

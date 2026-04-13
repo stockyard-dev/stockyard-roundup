@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/stockyard-dev/stockyard-roundup/internal/server"
 	"github.com/stockyard-dev/stockyard-roundup/internal/store"
+	"github.com/stockyard-dev/stockyard/bus"
 )
 
 var version = "dev"
@@ -40,7 +42,17 @@ func main() {
 	}
 	defer db.Close()
 
-	srv := server.New(db, server.DefaultLimits(), dataDir)
+	// Bus: one level up from private data dir so every tool in a
+	// bundle shares one _bus.db. Non-fatal.
+	var b *bus.Bus
+	if bb, berr := bus.Open(filepath.Dir(dataDir), "roundup"); berr != nil {
+		log.Printf("roundup: bus disabled: %v", berr)
+	} else {
+		b = bb
+		defer b.Close()
+	}
+
+	srv := server.New(db, server.DefaultLimits(), dataDir, b)
 
 	fmt.Printf("\n  Roundup v%s — Self-hosted task and project tracker\n", version)
 	fmt.Printf("  Dashboard:  http://localhost:%s/ui\n", port)
